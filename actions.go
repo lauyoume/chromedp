@@ -2,8 +2,10 @@ package chromedp
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/chromedp/cdproto"
 	"github.com/chromedp/cdproto/cdp"
 )
 
@@ -52,6 +54,22 @@ func Sleep(d time.Duration) Action {
 
 		case <-ctxt.Done():
 			return ctxt.Err()
+		}
+		return nil
+	})
+}
+
+func WaitEvent(event cdproto.MethodType) Action {
+	return ActionFunc(func(ctx context.Context, h cdp.Executor) error {
+		handler, ok := h.(*TargetHandler)
+		if !ok {
+			return errors.New("load event error, not target handler")
+		}
+		select {
+		case <-handler.Listen(event):
+
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 		return nil
 	})

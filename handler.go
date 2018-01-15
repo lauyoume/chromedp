@@ -43,6 +43,9 @@ type TargetHandler struct {
 	// qevents is the incoming event queue.
 	qevents chan *cdproto.Message
 
+	// listeners is a pool of event listeners
+	listeners map[cdproto.MethodType][]chan interface{}
+
 	// detached is closed when the detached event is received.
 	detached chan *inspector.EventDetached
 
@@ -274,6 +277,13 @@ func (h *TargetHandler) processEvent(ctxt context.Context, msg *cdproto.Message)
 		h.domWaitGroup.Wait()
 		h.documentUpdated(ctxt)
 		return nil
+	}
+
+	// Trigger registered event listeners by giving the event
+	if listeners, ok := h.listeners[msg.Method]; ok {
+		for _, listener := range listeners {
+			listener <- ev
+		}
 	}
 
 	d := msg.Method.Domain()
@@ -690,4 +700,25 @@ func (h *TargetHandler) domEvent(ctxt context.Context, ev interface{}) {
 	defer f.Unlock()
 
 	op(n)
+}
+
+// Listen creates a listener for the specified event types.
+func (h *TargetHandler) Listen(eventTypes ...cdproto.MethodType) <-chan interface{} {
+	out := make(chan interface{})
+
+	// Initialise listeners if it has not been initialised yet
+	if len(h.listeners) == 0 {
+		h.listeners = make(map[cdproto.MethodType][]chan interface{})
+	}
+
+	// Register the listener
+	for _, eventType := range eventTypes {
+		h.listeners[eventType] = append(h.listeners[eventType], out)
+	}
+	return out
+}
+
+// Release releases a channel returned from Listen.
+func (h *TargetHandler) Release(ch <-chan interface{}) {
+
 }
