@@ -87,7 +87,7 @@ func (h *TargetHandler) Run(ctxt context.Context) error {
 	h.frames = make(map[cdp.FrameID]*cdp.Frame)
 	h.qcmd = make(chan *cdproto.Message)
 	h.qres = make(chan *cdproto.Message)
-	h.qevents = make(chan *cdproto.Message)
+	h.qevents = make(chan *cdproto.Message, 1024)
 	h.res = make(map[int64]chan *cdproto.Message)
 	h.detached = make(chan *inspector.EventDetached)
 	h.pageWaitGroup = new(sync.WaitGroup)
@@ -155,8 +155,11 @@ func (h *TargetHandler) run(ctxt context.Context) {
 
 				switch {
 				case msg.Method != "":
-					h.qevents <- msg
-
+					select {
+					case h.qevents <- msg:
+					default:
+						panic("h.qevents is blocked!")
+					}
 				case msg.ID != 0:
 					h.qres <- msg
 
@@ -174,31 +177,58 @@ func (h *TargetHandler) run(ctxt context.Context) {
 		}
 	}()
 
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
 	// process queues
-	for {
-		select {
-		case ev := <-h.qevents:
-			err := h.processEvent(ctxt, ev)
-			if err != nil {
-				h.errorf("could not process event %s: %v", ev.Method, err)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case ev := <-h.qevents:
+				err := h.processEvent(ctxt, ev)
+				if err != nil {
+					h.errorf("could not process event %s: %v", ev.Method, err)
+				}
+			case <-ctxt.Done():
+				return
 			}
-
-		case res := <-h.qres:
-			err := h.processResult(res)
-			if err != nil {
-				h.errorf("could not process result for message %d: %v", res.ID, err)
-			}
-
-		case cmd := <-h.qcmd:
-			err := h.processCommand(cmd)
-			if err != nil {
-				h.errorf("could not process command message %d: %v", cmd.ID, err)
-			}
-
-		case <-ctxt.Done():
-			return
 		}
-	}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case res := <-h.qres:
+				err := h.processResult(res)
+				if err != nil {
+					h.errorf("could not process result for message %d: %v", res.ID, err)
+				}
+			case <-ctxt.Done():
+				return
+			}
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case cmd := <-h.qcmd:
+				err := h.processCommand(cmd)
+				if err != nil {
+					h.errorf("could not process command message %d: %v", cmd.ID, err)
+				}
+
+			case <-ctxt.Done():
+				return
+			}
+		}
+	}()
 }
 
 // read reads a message from the client connection.
@@ -236,13 +266,13 @@ func (h *TargetHandler) processEvent(ctxt context.Context, msg *cdproto.Message)
 	switch e := ev.(type) {
 	case *inspector.EventDetached:
 		h.Lock()
-		defer h.Unlock()
 		h.detached <- e
+		h.Unlock()
 		return nil
 
 	case *dom.EventDocumentUpdated:
 		h.domWaitGroup.Wait()
-		go h.documentUpdated(ctxt)
+		h.documentUpdated(ctxt)
 		return nil
 	}
 
@@ -254,11 +284,11 @@ func (h *TargetHandler) processEvent(ctxt context.Context, msg *cdproto.Message)
 	switch d {
 	case "Page":
 		h.pageWaitGroup.Add(1)
-		go h.pageEvent(ctxt, ev)
+		h.pageEvent(ctxt, ev)
 
 	case "DOM":
 		h.domWaitGroup.Add(1)
-		go h.domEvent(ctxt, ev)
+		h.domEvent(ctxt, ev)
 	}
 
 	return nil
@@ -519,22 +549,28 @@ func (h *TargetHandler) pageEvent(ctxt context.Context, ev interface{}) {
 		return
 
 	case *page.EventFrameAttached:
-		id, op = e.FrameID, frameAttached(e.ParentFrameID)
+		// id, op = e.FrameID, frameAttached(e.ParentFrameID)
+		return
 
 	case *page.EventFrameDetached:
-		id, op = e.FrameID, frameDetached
+		// id, op = e.FrameID, frameDetached
+		return
 
 	case *page.EventFrameStartedLoading:
-		id, op = e.FrameID, frameStartedLoading
+		// id, op = e.FrameID, frameStartedLoading
+		return
 
 	case *page.EventFrameStoppedLoading:
-		id, op = e.FrameID, frameStoppedLoading
+		// id, op = e.FrameID, frameStoppedLoading
+		return
 
 	case *page.EventFrameScheduledNavigation:
-		id, op = e.FrameID, frameScheduledNavigation
+		// id, op = e.FrameID, frameScheduledNavigation
+		return
 
 	case *page.EventFrameClearedScheduledNavigation:
-		id, op = e.FrameID, frameClearedScheduledNavigation
+		// id, op = e.FrameID, frameClearedScheduledNavigation
+		return
 
 		// ignored events
 	case *page.EventDomContentEventFired:
