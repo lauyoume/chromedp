@@ -92,9 +92,9 @@ func Encode(r rune) []*input.DispatchKeyEventParams {
 
 	// create
 	keyDown := input.DispatchKeyEventParams{
-		Key:                   v.Key,
-		Code:                  v.Code,
-		NativeVirtualKeyCode:  v.Native,
+		Key:  v.Key,
+		Code: v.Code,
+		// NativeVirtualKeyCode:  v.Native,
 		WindowsVirtualKeyCode: v.Windows,
 	}
 	if v.Shift {
