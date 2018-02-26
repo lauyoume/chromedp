@@ -6,7 +6,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/chromedp/chromedp/runner"
+	"github.com/lauyoume/chromedp/runner"
 )
 
 // Pool manages a pool of running Chrome processes.
