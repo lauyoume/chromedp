@@ -18,6 +18,7 @@ import (
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/inspector"
 	"github.com/chromedp/cdproto/log"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 
@@ -104,7 +105,7 @@ func (h *TargetHandler) Run(ctxt context.Context) error {
 	for _, a := range []Action{
 		log.Enable(),
 		runtime.Enable(),
-		//network.Enable(),
+		network.Enable(),
 		inspector.Enable(),
 		page.Enable(),
 		dom.Enable(),
@@ -266,6 +267,15 @@ func (h *TargetHandler) processEvent(ctxt context.Context, msg *cdproto.Message)
 		return err
 	}
 
+	// Trigger registered event listeners by giving the event
+	h.RLock()
+	if listeners, ok := h.listeners[msg.Method]; ok {
+		for _, listener := range listeners {
+			listener <- ev
+		}
+	}
+	h.RUnlock()
+
 	switch e := ev.(type) {
 	case *inspector.EventDetached:
 		h.Lock()
@@ -277,13 +287,6 @@ func (h *TargetHandler) processEvent(ctxt context.Context, msg *cdproto.Message)
 		h.domWaitGroup.Wait()
 		h.documentUpdated(ctxt)
 		return nil
-	}
-
-	// Trigger registered event listeners by giving the event
-	if listeners, ok := h.listeners[msg.Method]; ok {
-		for _, listener := range listeners {
-			listener <- ev
-		}
 	}
 
 	d := msg.Method.Domain()
@@ -704,6 +707,9 @@ func (h *TargetHandler) domEvent(ctxt context.Context, ev interface{}) {
 
 // Listen creates a listener for the specified event types.
 func (h *TargetHandler) Listen(eventTypes ...cdproto.MethodType) <-chan interface{} {
+	h.Lock()
+	defer h.Unlock()
+
 	out := make(chan interface{})
 
 	// Initialise listeners if it has not been initialised yet
@@ -720,5 +726,26 @@ func (h *TargetHandler) Listen(eventTypes ...cdproto.MethodType) <-chan interfac
 
 // Release releases a channel returned from Listen.
 func (h *TargetHandler) Release(ch <-chan interface{}) {
+	h.Lock()
+	defer h.Unlock()
 
+	var last chan interface{}
+	for ev, chs := range h.listeners {
+		for idx, dst := range chs {
+			if dst != ch {
+				continue
+			}
+			last = dst
+			chs[idx] = nil
+			if idx == len(chs)-1 {
+				h.listeners[ev] = chs[:len(chs)-1]
+			} else {
+				h.listeners[ev] = append(chs[:idx], chs[idx+1:len(chs)-1]...)
+			}
+			break
+		}
+	}
+	if last != nil {
+		close(last)
+	}
 }

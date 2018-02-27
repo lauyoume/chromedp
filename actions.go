@@ -65,9 +65,11 @@ func WaitEvent(event cdproto.MethodType) Action {
 		if !ok {
 			return errors.New("load event error, not target handler")
 		}
-		select {
-		case <-handler.Listen(event):
+		ch := handler.Listen(event)
+		defer handler.Release(ch)
 
+		select {
+		case <-ch:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
