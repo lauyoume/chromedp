@@ -13,6 +13,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/dom"
+
 	"github.com/chromedp/chromedp/kb"
 )
 
@@ -805,7 +806,7 @@ func TestSubmit(t *testing.T) {
 				t.Fatalf("got error: %v", err)
 			}
 			if title != "this is title" {
-				t.Errorf("expected title to be 'chromedp - Google Search', got: '%s'", title)
+				t.Errorf("expected title to be 'this is title', got: '%s'", title)
 			}
 		})
 	}

@@ -61,13 +61,13 @@ type TargetHandler struct {
 	resrw sync.RWMutex
 
 	// logging funcs
-	logf, debugf, errorf LogFunc
+	logf, debugf, errf func(string, ...interface{})
 
 	sync.RWMutex
 }
 
 // NewTargetHandler creates a new handler for the specified client target.
-func NewTargetHandler(t client.Target, logf, debugf, errorf LogFunc) (*TargetHandler, error) {
+func NewTargetHandler(t client.Target, logf, debugf, errf func(string, ...interface{})) (*TargetHandler, error) {
 	conn, err := client.Dial(t)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func NewTargetHandler(t client.Target, logf, debugf, errorf LogFunc) (*TargetHan
 		conn:   conn,
 		logf:   logf,
 		debugf: debugf,
-		errorf: errorf,
+		errf:   errf,
 	}, nil
 }
 
@@ -168,7 +168,7 @@ func (h *TargetHandler) run(ctxt context.Context) {
 					h.qres <- msg
 
 				default:
-					h.errorf("ignoring malformed incoming message (missing id or method): %#v", msg)
+					h.errf("ignoring malformed incoming message (missing id or method): %#v", msg)
 				}
 
 			case <-h.detached:
@@ -193,7 +193,7 @@ func (h *TargetHandler) run(ctxt context.Context) {
 			case ev := <-h.qevents:
 				err := h.processEvent(ctxt, ev)
 				if err != nil {
-					h.errorf("could not process event %s: %v", ev.Method, err)
+					h.errf("could not process event %s: %v", ev.Method, err)
 				}
 			case <-ctxt.Done():
 				return
@@ -209,7 +209,7 @@ func (h *TargetHandler) run(ctxt context.Context) {
 			case res := <-h.qres:
 				err := h.processResult(res)
 				if err != nil {
-					h.errorf("could not process result for message %d: %v", res.ID, err)
+					h.errf("could not process result for message %d: %v", res.ID, err)
 				}
 			case <-ctxt.Done():
 				return
@@ -225,9 +225,8 @@ func (h *TargetHandler) run(ctxt context.Context) {
 			case cmd := <-h.qcmd:
 				err := h.processCommand(cmd)
 				if err != nil {
-					h.errorf("could not process command message %d: %v", cmd.ID, err)
+					h.errf("could not process command message %d: %v", cmd.ID, err)
 				}
-
 			case <-ctxt.Done():
 				return
 			}
@@ -312,7 +311,7 @@ func (h *TargetHandler) processEvent(ctxt context.Context, msg *cdproto.Message)
 func (h *TargetHandler) documentUpdated(ctxt context.Context) {
 	f, err := h.WaitFrame(ctxt, cdp.EmptyFrameID)
 	if err != nil {
-		h.errorf("could not get current frame: %v", err)
+		h.errf("could not get current frame: %v", err)
 		return
 	}
 
@@ -327,7 +326,7 @@ func (h *TargetHandler) documentUpdated(ctxt context.Context) {
 	f.Nodes = make(map[cdp.NodeID]*cdp.Node)
 	f.Root, err = dom.GetDocument().WithPierce(true).Do(ctxt, h)
 	if err != nil {
-		h.errorf("could not retrieve document root for %s: %v", f.ID, err)
+		h.errf("could not retrieve document root for %s: %v", f.ID, err)
 		return
 	}
 	f.Root.Invalidated = make(chan struct{})
@@ -596,13 +595,13 @@ func (h *TargetHandler) pageEvent(ctxt context.Context, ev interface{}) {
 		return
 
 	default:
-		h.errorf("unhandled page event %s", reflect.TypeOf(ev))
+		h.errf("unhandled page event %s", reflect.TypeOf(ev))
 		return
 	}
 
 	f, err := h.WaitFrame(ctxt, id)
 	if err != nil {
-		h.errorf("could not get frame %s: %v", id, err)
+		h.errf("could not get frame %s: %v", id, err)
 		return
 	}
 
@@ -622,7 +621,7 @@ func (h *TargetHandler) domEvent(ctxt context.Context, ev interface{}) {
 	// wait current frame
 	f, err := h.WaitFrame(ctxt, cdp.EmptyFrameID)
 	if err != nil {
-		h.errorf("could not process DOM event %s: %v", reflect.TypeOf(ev), err)
+		h.errf("could not process DOM event %s: %v", reflect.TypeOf(ev), err)
 		return
 	}
 
@@ -680,7 +679,7 @@ func (h *TargetHandler) domEvent(ctxt context.Context, ev interface{}) {
 		id, op = e.InsertionPointID, distributedNodesUpdated(e.DistributedNodes)
 
 	default:
-		h.errorf("unhandled node event %s", reflect.TypeOf(ev))
+		h.errf("unhandled node event %s", reflect.TypeOf(ev))
 		return
 	}
 
@@ -692,7 +691,7 @@ func (h *TargetHandler) domEvent(ctxt context.Context, ev interface{}) {
 		if i != -1 {
 			s = s[i+1:]
 		}
-		h.errorf("could not perform (%s) operation on node %d (wait node): %v", s, id, err)
+		h.errf("could not perform (%s) operation on node %d (wait node): %v", s, id, err)
 		return
 	}
 
