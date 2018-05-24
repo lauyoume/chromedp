@@ -22,7 +22,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 
-	"github.com/lauyoume/chromedp/client"
+	"github.com/chromedp/chromedp/client"
 )
 
 // TargetHandler manages a Chrome Debugging Protocol target.

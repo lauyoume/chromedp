@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
-	"github.com/lauyoume/chromedp/client"
-	"github.com/lauyoume/chromedp/runner"
+	"github.com/chromedp/chromedp/client"
+	"github.com/chromedp/chromedp/runner"
 )
 
 const (

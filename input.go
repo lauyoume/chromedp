@@ -8,7 +8,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/dom"
 	"github.com/chromedp/cdproto/input"
-	"github.com/lauyoume/chromedp/kb"
+	"github.com/chromedp/chromedp/kb"
 )
 
 // MouseAction is a mouse action.
