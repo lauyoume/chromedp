@@ -162,7 +162,8 @@ func (h *TargetHandler) run(ctxt context.Context) {
 					select {
 					case h.qevents <- msg:
 					default:
-						panic("h.qevents is blocked!")
+						h.errf("h.qevents is full %#v", msg)
+						// 	panic("h.qevents is blocked!")
 					}
 				case msg.ID != 0:
 					h.qres <- msg
